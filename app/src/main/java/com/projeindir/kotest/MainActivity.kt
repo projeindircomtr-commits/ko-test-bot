@@ -9,7 +9,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -18,6 +20,13 @@ import android.widget.Toast
 class MainActivity : Activity() {
     private val reqCapture = 41
     private lateinit var info: TextView
+    private lateinit var slotBox: LinearLayout
+    private lateinit var sessionEt: EditText
+    private lateinit var breakEt: EditText
+    private var slots = mutableListOf<Slot>()
+
+    private class Row(val sec: EditText, val pct: EditText)
+    private val rows = mutableListOf<Row>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,30 +35,48 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
         }
-        root.addView(TextView(this).apply { text = "Projeindir Bot – KO Mobile Test"; textSize = 20f })
-        info = TextView(this).apply { textSize = 14f; setPadding(0, pad / 2, 0, pad / 2) }
-        root.addView(info)
+        fun label(t: String, size: Float = 14f) =
+            TextView(this).apply { text = t; textSize = size; setPadding(0, pad / 2, 0, pad / 4) }.also { root.addView(it) }
+        fun btn(t: String, action: () -> Unit) =
+            Button(this).apply { text = t; setOnClickListener { action() } }.also { root.addView(it) }
 
-        fun btn(t: String, action: () -> Unit) {
-            root.addView(Button(this).apply { text = t; setOnClickListener { action() } })
-        }
-        btn("1) Erişilebilirlik iznini aç") {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
+        label("Projeindir Bot – KO Mobile", 20f)
+        info = label("")
+        btn("1) Erişilebilirlik iznini aç") { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         btn("2) Üstte gösterme iznini aç") {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         }
         btn("3) Ekran yakalamayı başlat") { startCapture() }
         btn("Durdur") { stopService(Intent(this, ScreenCaptureService::class.java)) }
 
-        root.addView(TextView(this).apply {
-            textSize = 13f
-            setPadding(0, pad, 0, 0)
-            text = "Kullanım:\n• 3. adımda \"Tüm ekran\" seç.\n• KO Mobile'ı aç, soldaki panelde önce TEST'e bas: " +
-                "bot sadece okur, hiçbir yere basmaz.\n• HP/MP/Hedef/Sandık değerleri doğruysa BAŞLAT.\n" +
-                "• Paneli hedef barının veya sandık butonunun üstüne sürükleme."
-        })
+        label("Çalışma / mola", 17f)
+        label("Bot bu kadar dakika çalışır, sonra zorunlu mola verir.")
+        val timeRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        sessionEt = num("Çalışma dk", false)
+        breakEt = num("Mola dk", false)
+        timeRow.addView(TextView(this).apply { text = "Çalışma dk: " })
+        timeRow.addView(sessionEt)
+        timeRow.addView(TextView(this).apply { text = "  Mola dk: " })
+        timeRow.addView(breakEt)
+        root.addView(timeRow)
+
+        label("Slotlar", 17f)
+        label("Oyunda paneldeki +SLOT ile ekle. Tip butonuna basarak Skill / HP pot / MP pot arasında değiştir.\n" +
+            "Skill: \"sn\" = kaç saniyede bir basılsın.\nPot: \"%\" = can/mana bunun altına düşünce bas, \"sn\" = potun bekleme süresi.")
+        slotBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        root.addView(slotBox)
+        btn("Kaydet") { saveAll(); Toast.makeText(this, "Kaydedildi", Toast.LENGTH_SHORT).show() }
+
+        label("Kullanım: oyunda önce TEST ile okunan değerlere bak, sonra BAŞLAT. " +
+            "Ayarı değiştirdikten sonra paneldeki BAŞLAT'a yeniden bas.")
         setContentView(ScrollView(this).apply { addView(root) })
+    }
+
+    private fun num(hint: String, decimal: Boolean) = EditText(this).apply {
+        this.hint = hint
+        inputType = if (decimal) InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        else InputType.TYPE_CLASS_NUMBER
+        minEms = 3
     }
 
     override fun onResume() {
@@ -57,6 +84,71 @@ class MainActivity : Activity() {
         val acc = if (TapService.instance != null) "AÇIK" else "KAPALI"
         val ovl = if (Settings.canDrawOverlays(this)) "AÇIK" else "KAPALI"
         info.text = "Erişilebilirlik: $acc\nÜstte gösterme: $ovl"
+        sessionEt.setText(Store.sessionMin(this).toString())
+        breakEt.setText(Store.breakMin(this).toString())
+        slots = Store.loadSlots(this)
+        render()
+    }
+
+    private fun render() {
+        slotBox.removeAllViews()
+        rows.clear()
+        if (slots.isEmpty()) {
+            slotBox.addView(TextView(this).apply { text = "Henüz slot yok." })
+            return
+        }
+        slots.forEachIndexed { i, s ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            row.addView(TextView(this).apply { text = "${i + 1}. " })
+            row.addView(Button(this).apply {
+                text = s.type.label
+                setOnClickListener {
+                    collect()
+                    s.type = SlotType.values()[(s.type.ordinal + 1) % SlotType.values().size]
+                    if (s.type != SlotType.SKILL && s.seconds < 2f) s.seconds = 2f
+                    render()
+                }
+            })
+            val sec = num("sn", true).apply { setText(trim(s.seconds)) }
+            val pct = num("%", false).apply {
+                setText(s.percent.toString())
+                isEnabled = s.type != SlotType.SKILL
+            }
+            row.addView(TextView(this).apply { text = " sn:" }); row.addView(sec)
+            row.addView(TextView(this).apply { text = " %:" }); row.addView(pct)
+            row.addView(Button(this).apply {
+                text = "Sil"
+                setOnClickListener { collect(); slots.removeAt(i); Store.saveSlots(this@MainActivity, slots); render() }
+            })
+            rows.add(Row(sec, pct))
+            slotBox.addView(row)
+        }
+    }
+
+    private fun trim(f: Float) = if (f == f.toInt().toFloat()) f.toInt().toString() else f.toString()
+
+    private fun collect() {
+        if (rows.size != slots.size) return
+        rows.forEachIndexed { i, r ->
+            r.sec.text.toString().replace(',', '.').toFloatOrNull()?.let { slots[i].seconds = it.coerceIn(0.5f, 600f) }
+            r.pct.text.toString().toIntOrNull()?.let { slots[i].percent = it.coerceIn(5, 95) }
+        }
+    }
+
+    private fun saveAll() {
+        collect()
+        Store.saveSlots(this, slots)
+        val sm = sessionEt.text.toString().toIntOrNull() ?: Store.sessionMin(this)
+        val bm = breakEt.text.toString().toIntOrNull() ?: Store.breakMin(this)
+        Store.saveTimes(this, sm, bm)
+        sessionEt.setText(Store.sessionMin(this).toString())
+        breakEt.setText(Store.breakMin(this).toString())
+        render()
+    }
+
+    override fun onPause() {
+        saveAll()
+        super.onPause()
     }
 
     private fun startCapture() {
@@ -87,6 +179,6 @@ class MainActivity : Activity() {
             .putExtra(ScreenCaptureService.EXTRA_CODE, resultCode)
             .putExtra(ScreenCaptureService.EXTRA_DATA, data)
         startForegroundService(i)
-        Toast.makeText(this, "Hazır. KO Mobile'ı aç, paneldeki TEST ile dene.", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, "Hazır. KO Mobile'ı aç, +SLOT ile slotlarını ekle.", Toast.LENGTH_LONG).show()
     }
 }

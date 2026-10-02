@@ -7,17 +7,16 @@ import kotlin.math.sin
 data class BarRead(val fill: Float, val startsLeft: Boolean, val hits: Int)
 
 data class State(
-    val hp: Float,
-    val mp: Float,
-    val target: Boolean,
-    val targetHp: Float,
+    val hp: Float, val hpSeen: Boolean,
+    val mp: Float, val mpSeen: Boolean,
+    val target: Boolean, val targetHp: Float,
     val lootScore: Int
 ) {
     val loot get() = lootScore >= KoMobile.LOOT_MIN
     private fun pct(v: Float) = (v * 100).roundToInt()
-    fun text() = "HP %${pct(hp)}  MP %${pct(mp)}\n" +
-        "Hedef: " + (if (target) "VAR %${pct(targetHp)}" else "YOK") + "\n" +
-        "Sandık: " + (if (loot) "VAR" else "YOK") + " ($lootScore/${Vision.LOOT_SAMPLES})"
+    fun text() = "HP ~%${pct(hp)}  MP ~%${pct(mp)}\n" +
+        "Hedef: " + (if (target) "VAR ~%${pct(targetHp)}" else "YOK") +
+        "  Sandık: " + (if (loot) "VAR" else "YOK") + " ($lootScore)"
 }
 
 object Vision {
@@ -27,7 +26,6 @@ object Vision {
     private fun blue(r: Int, g: Int, b: Int) = b > 110 && b * 2 > r * 3 && b * 5 > g * 6
     private fun gold(r: Int, g: Int, b: Int) = r > 170 && g > 100 && b < 80 && r >= g && r - b > 110
 
-    /** Barın doluluğunu en sağdaki renkli pikselden hesaplar (üstteki beyaz yazı etkilemez). */
     fun bar(f: Frame, a: Bar, test: (Int, Int, Int) -> Boolean): BarRead {
         val x1 = f.px(a.x1); val x2 = f.px(a.x2)
         val y1 = f.py(a.y1); val y2 = f.py(a.y2)
@@ -48,7 +46,6 @@ object Vision {
         return BarRead(fill, startsLeft, hits)
     }
 
-    /** Sandık butonunun altın halkasında kaç nokta altın renkte. */
     fun loot(f: Frame): Int {
         val cx = KoMobile.LOOT_BTN.x * f.w
         val cy = KoMobile.LOOT_BTN.y * f.h
@@ -70,6 +67,11 @@ object Vision {
         val mp = bar(f, KoMobile.MP_BAR) { r, g, b -> blue(r, g, b) }
         val t = bar(f, KoMobile.TARGET_BAR) { r, g, b -> red(r, g, b) }
         val hasTarget = t.startsLeft && t.hits >= 3
-        return State(hp.fill, mp.fill, hasTarget, if (hasTarget) t.fill else 0f, loot(f))
+        return State(
+            hp.fill, hp.startsLeft && hp.hits >= 3,
+            mp.fill, mp.startsLeft && mp.hits >= 3,
+            hasTarget, if (hasTarget) t.fill else 0f,
+            loot(f)
+        )
     }
 }

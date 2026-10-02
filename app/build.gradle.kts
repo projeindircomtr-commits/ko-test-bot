@@ -11,8 +11,8 @@ android {
         applicationId = "com.projeindir.kotest"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1-test"
+        versionCode = 2
+        versionName = "0.2-slot"
     }
 
     // Sabit anahtar: her GitHub derlemesi aynı imzayla çıkar, üstüne kurulum yapılabilir

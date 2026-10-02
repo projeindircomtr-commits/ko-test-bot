@@ -22,9 +22,18 @@ jobs:
           gradle-version: "8.9"
       - name: Derle
         run: gradle assembleDebug --no-daemon
-      - name: Yayınla
+      - name: APK listesi
+        run: find app/build/outputs -name "*.apk"
+      - name: Actions'a yukle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ko-test-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - name: Releases'a yukle
         uses: softprops/action-gh-release@v2
         with:
           tag_name: test-${{ github.run_number }}
           name: KO Test ${{ github.run_number }}
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: app/build/outputs/apk/debug/*.apk
+          fail_on_unmatched_files: true

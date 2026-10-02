@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.os.Build
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.WindowManager
@@ -11,11 +12,11 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 
-/** Oyunun üstünde duran küçük sürüklenebilir panel. */
 class Overlay(
     private val ctx: Context,
     private val onTest: () -> Unit,
     private val onRun: () -> Unit,
+    private val onAddSlot: () -> Unit,
     private val onClose: () -> Unit
 ) {
     private val wm = ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -32,16 +33,17 @@ class Overlay(
             text = t
             textSize = 11f
             minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
-            setPadding((10 * d).toInt(), (4 * d).toInt(), (10 * d).toInt(), (4 * d).toInt())
+            setPadding((9 * d).toInt(), (4 * d).toInt(), (9 * d).toInt(), (4 * d).toInt())
             setOnClickListener { action() }
         }
         testBtn = btn("TEST", onTest)
         runBtn = btn("BAŞLAT", onRun)
+        val add = btn("+SLOT", onAddSlot)
         val close = btn("X", onClose)
 
         val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(testBtn); addView(runBtn); addView(close)
+            addView(testBtn); addView(runBtn); addView(add); addView(close)
         }
         status = TextView(ctx).apply {
             setTextColor(Color.WHITE)
@@ -79,9 +81,38 @@ class Overlay(
             }
             true
         }
-
         wm.addView(r, lp)
         root = r
+    }
+
+    /** Tüm ekranı kaplayan yarı saydam katman: kullanıcı slota dokunur, konum alınır. */
+    @SuppressLint("ClickableViewAccessibility")
+    fun pickPoint(onPicked: (Float, Float) -> Unit) {
+        val v = TextView(ctx).apply {
+            text = "Eklemek istediğin skill/pot slotuna dokun"
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setBackgroundColor(0x55000000)
+        }
+        val plp = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        )
+        if (Build.VERSION.SDK_INT >= 28) {
+            plp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        v.setOnTouchListener { _, e ->
+            if (e.action == MotionEvent.ACTION_UP) {
+                try { wm.removeView(v) } catch (_: Exception) {}
+                onPicked(e.rawX, e.rawY)
+            }
+            true
+        }
+        wm.addView(v, plp)
     }
 
     fun setStatus(s: String) { if (root != null) status.text = s }

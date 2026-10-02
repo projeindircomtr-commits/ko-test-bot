@@ -103,7 +103,7 @@ class ScreenCaptureService : Service() {
         )
         projection = mp
 
-        overlay = Overlay(this, { toggle("test") }, { toggle("run") }, { stopSelf() }).also { it.show() }
+        overlay = Overlay(this, { toggle("test") }, { toggle("run") }, { addSlot() }, { stopSelf() }).also { it.show() }
     }
 
     private fun toggle(m: String) {
@@ -115,10 +115,26 @@ class ScreenCaptureService : Service() {
             overlay?.setStatus("Durduruldu")
             return
         }
+        val slots = Store.loadSlots(this)
+        if (m == "run" && slots.none { it.type == SlotType.SKILL }) {
+            overlay?.setStatus("Skill slotu yok.\n+SLOT ile ekle, süresini uygulamada ayarla.")
+        }
         mode = m
-        engine = BotEngine(this, m == "test") { s -> main.post { overlay?.setStatus(s) } }
-            .also { it.start() }
+        engine = BotEngine(
+            this, m == "test", slots, Store.sessionMin(this), Store.breakMin(this)
+        ) { s -> main.post { overlay?.setStatus(s) } }.also { it.start() }
         overlay?.setMode(mode)
+    }
+
+    private fun addSlot() {
+        if (mode != "idle") toggle(mode) // önce durdur
+        overlay?.pickPoint { x, y ->
+            val sz = realScreenSize(this)
+            val list = Store.loadSlots(this)
+            list.add(Slot(x / sz.x, y / sz.y, SlotType.SKILL, 3f, 50))
+            Store.saveSlots(this, list)
+            overlay?.setStatus("Slot ${list.size} eklendi (Skill, 3 sn).\nTipini/süresini uygulamada değiştir.")
+        }
     }
 
     /** En son ekran karesini verir (yeni kare yoksa bir öncekini). */
