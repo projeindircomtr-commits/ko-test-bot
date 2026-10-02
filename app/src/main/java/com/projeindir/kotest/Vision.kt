@@ -10,13 +10,14 @@ data class State(
     val hp: Float, val hpSeen: Boolean,
     val mp: Float, val mpSeen: Boolean,
     val target: Boolean, val targetHp: Float,
-    val lootScore: Int
+    val lootDark: Int,
+    val lootGold: Int
 ) {
-    val loot get() = lootScore >= KoMobile.LOOT_MIN
+    val loot get() = lootDark >= KoMobile.LOOT_DARK_MIN && lootGold >= KoMobile.LOOT_GOLD_MIN
     private fun pct(v: Float) = (v * 100).roundToInt()
     fun text() = "HP ~%${pct(hp)}  MP ~%${pct(mp)}\n" +
         "Hedef: " + (if (target) "VAR ~%${pct(targetHp)}" else "YOK") +
-        "  Sandık: " + (if (loot) "VAR" else "YOK") + " ($lootScore)"
+        "  Sandık: " + (if (loot) "VAR" else "YOK") + " ($lootDark/$lootGold)"
 }
 
 object Vision {
@@ -24,7 +25,8 @@ object Vision {
 
     private fun red(r: Int, g: Int, b: Int) = r > 120 && r > g * 2 && r > b * 2
     private fun blue(r: Int, g: Int, b: Int) = b > 110 && b * 2 > r * 3 && b * 5 > g * 6
-    private fun gold(r: Int, g: Int, b: Int) = r > 170 && g > 100 && b < 80 && r >= g && r - b > 110
+    private fun dark(r: Int, g: Int, b: Int) = r < 90 && g < 90 && b < 90
+    private fun gold(r: Int, g: Int, b: Int) = r > 150 && r - b > 60
 
     fun bar(f: Frame, a: Bar, test: (Int, Int, Int) -> Boolean): BarRead {
         val x1 = f.px(a.x1); val x2 = f.px(a.x2)
@@ -46,20 +48,19 @@ object Vision {
         return BarRead(fill, startsLeft, hits)
     }
 
-    fun loot(f: Frame): Int {
+    /** Daire üzerindeki 24 noktadan kaçı koşulu sağlıyor. */
+    private fun ring(f: Frame, radius: Float, test: (Int, Int, Int) -> Boolean): Int {
         val cx = KoMobile.LOOT_BTN.x * f.w
         val cy = KoMobile.LOOT_BTN.y * f.h
-        var score = 0
+        val rp = radius * f.w
+        var n = 0
         for (i in 0 until LOOT_SAMPLES) {
             val ang = 2.0 * Math.PI * i / LOOT_SAMPLES
-            for (rr in KoMobile.LOOT_RADII) {
-                val rp = rr * f.w
-                val x = (cx + rp * cos(ang)).toInt().coerceIn(0, f.w - 1)
-                val y = (cy + rp * sin(ang)).toInt().coerceIn(0, f.h - 1)
-                if (gold(f.r(x, y), f.g(x, y), f.b(x, y))) { score++; break }
-            }
+            val x = (cx + rp * cos(ang)).toInt().coerceIn(0, f.w - 1)
+            val y = (cy + rp * sin(ang)).toInt().coerceIn(0, f.h - 1)
+            if (test(f.r(x, y), f.g(x, y), f.b(x, y))) n++
         }
-        return score
+        return n
     }
 
     fun read(f: Frame): State {
@@ -71,7 +72,8 @@ object Vision {
             hp.fill, hp.startsLeft && hp.hits >= 3,
             mp.fill, mp.startsLeft && mp.hits >= 3,
             hasTarget, if (hasTarget) t.fill else 0f,
-            loot(f)
+            ring(f, KoMobile.LOOT_DARK_R) { r, g, b -> dark(r, g, b) },
+            ring(f, KoMobile.LOOT_GOLD_R) { r, g, b -> gold(r, g, b) }
         )
     }
 }

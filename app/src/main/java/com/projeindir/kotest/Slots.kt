@@ -7,7 +7,8 @@ import org.json.JSONObject
 enum class SlotType(val label: String) { SKILL("Skill"), HP("HP pot"), MP("MP pot") }
 
 /** seconds: skill için bekleme süresi; percent: pot için "bunun altına düşünce bas". */
-data class Slot(var x: Float, var y: Float, var type: SlotType, var seconds: Float, var percent: Int)
+/** no: hazır slot numarası (1..17), 0 = ekrandan dokunarak eklenmiş özel konum. */
+data class Slot(var x: Float, var y: Float, var type: SlotType, var seconds: Float, var percent: Int, var no: Int = 0)
 
 object Store {
     private fun prefs(c: Context) = c.getSharedPreferences("bot", Context.MODE_PRIVATE)
@@ -21,7 +22,7 @@ object Store {
                 Slot(
                     o.getDouble("x").toFloat(), o.getDouble("y").toFloat(),
                     SlotType.valueOf(o.getString("t")),
-                    o.getDouble("s").toFloat(), o.getInt("p")
+                    o.getDouble("s").toFloat(), o.getInt("p"), o.optInt("n", 0)
                 )
             }
         } catch (_: Exception) {
@@ -34,7 +35,7 @@ object Store {
         list.forEach {
             a.put(
                 JSONObject().put("x", it.x.toDouble()).put("y", it.y.toDouble())
-                    .put("t", it.type.name).put("s", it.seconds.toDouble()).put("p", it.percent)
+                    .put("t", it.type.name).put("s", it.seconds.toDouble()).put("p", it.percent).put("n", it.no)
             )
         }
         prefs(c).edit().putString("slots", a.toString()).apply()

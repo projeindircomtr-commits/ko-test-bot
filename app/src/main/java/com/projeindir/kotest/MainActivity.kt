@@ -61,8 +61,32 @@ class MainActivity : Activity() {
         root.addView(timeRow)
 
         label("Slotlar", 17f)
-        label("Oyunda paneldeki +SLOT ile ekle. Tip butonuna basarak Skill / HP pot / MP pot arasında değiştir.\n" +
+        label("Numarayla ata: oyunda paneldeki NO butonuna bas, slot numaralarını gör, buradan No yazıp Ata'ya bas. " +
+            "Halkada olmayan bir yer için paneldeki +SLOT ile dokunarak da ekleyebilirsin. Tip butonuna basarak Skill / HP pot / MP pot arasında değiştir.\n" +
             "Skill: \"sn\" = kaç saniyede bir basılsın.\nPot: \"%\" = can/mana bunun altına düşünce bas, \"sn\" = potun bekleme süresi.")
+        val addRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val noEt = num("No", false)
+        addRow.addView(TextView(this).apply { text = "Slot No (1-${KoMobile.SLOT_POINTS.size}): " })
+        addRow.addView(noEt)
+        addRow.addView(Button(this).apply {
+            text = "Ata"
+            setOnClickListener {
+                val n = noEt.text.toString().toIntOrNull()
+                if (n == null || n !in 1..KoMobile.SLOT_POINTS.size) {
+                    Toast.makeText(this@MainActivity, "1 ile ${KoMobile.SLOT_POINTS.size} arası yaz", Toast.LENGTH_SHORT).show()
+                } else if (slots.any { it.no == n }) {
+                    Toast.makeText(this@MainActivity, "No $n zaten ekli", Toast.LENGTH_SHORT).show()
+                } else {
+                    collect()
+                    val p = KoMobile.SLOT_POINTS[n - 1]
+                    slots.add(Slot(p.x, p.y, SlotType.SKILL, 1.5f, 50, n))
+                    Store.saveSlots(this@MainActivity, slots)
+                    noEt.setText("")
+                    render()
+                }
+            }
+        })
+        root.addView(addRow)
         slotBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(slotBox)
         btn("Kaydet") { saveAll(); Toast.makeText(this, "Kaydedildi", Toast.LENGTH_SHORT).show() }
@@ -99,7 +123,7 @@ class MainActivity : Activity() {
         }
         slots.forEachIndexed { i, s ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            row.addView(TextView(this).apply { text = "${i + 1}. " })
+            row.addView(TextView(this).apply { text = if (s.no > 0) "No ${s.no} " else "Özel " })
             row.addView(Button(this).apply {
                 text = s.type.label
                 setOnClickListener {

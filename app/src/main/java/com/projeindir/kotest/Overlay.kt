@@ -39,11 +39,12 @@ class Overlay(
         testBtn = btn("TEST", onTest)
         runBtn = btn("BAŞLAT", onRun)
         val add = btn("+SLOT", onAddSlot)
+        val no = btn("NO") { toggleLabels() }
         val close = btn("X", onClose)
 
         val row = LinearLayout(ctx).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(testBtn); addView(runBtn); addView(add); addView(close)
+            addView(testBtn); addView(runBtn); addView(add); addView(no); addView(close)
         }
         status = TextView(ctx).apply {
             setTextColor(Color.WHITE)
@@ -115,6 +116,34 @@ class Overlay(
         wm.addView(v, plp)
     }
 
+    private var labels: SlotLabels? = null
+
+    /** Slot numaralarını göster/gizle. Dokunmaları geçirir, oyun normal oynanır. */
+    private fun toggleLabels() {
+        labels?.let {
+            try { wm.removeView(it) } catch (_: Exception) {}
+            labels = null
+            return
+        }
+        val v = SlotLabels(ctx)
+        val llp = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        )
+        if (Build.VERSION.SDK_INT >= 28) {
+            llp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+        wm.addView(v, llp)
+        labels = v
+        // Panel numaraların üstünde kalsın
+        root?.let { try { wm.removeView(it); wm.addView(it, lp) } catch (_: Exception) {} }
+    }
+
     fun setStatus(s: String) { if (root != null) status.text = s }
 
     fun setMode(mode: String) {
@@ -124,6 +153,8 @@ class Overlay(
     }
 
     fun remove() {
+        labels?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        labels = null
         root?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         root = null
     }
